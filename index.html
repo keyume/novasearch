@@ -421,8 +421,11 @@ async function doSearch() {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
+      const e = await res.json().catch(()=>({}));
+      const errMsg = typeof e.error === 'string' ? e.error
+                   : e.error?.message || e.message
+                   || JSON.stringify(e).slice(0, 200);
+      throw new Error(`HTTP ${res.status}: ${errMsg}`);
     }
 
     const data = await res.json();
