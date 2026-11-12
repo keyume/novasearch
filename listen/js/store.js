@@ -124,7 +124,13 @@ export function createStore(storage = defaultStorage(), { now = Date.now } = {})
   const cached = read(CACHE_KEY);
   const cache = isObject(cached)
     ? Object.fromEntries(
-        Object.entries(cached).filter(([, entry]) => isObject(entry) && Number.isFinite(entry.at) && isObject(entry.data))
+        Object.entries(cached).filter(
+          ([, entry]) =>
+            isObject(entry) &&
+            Number.isFinite(entry.at) &&
+            isObject(entry.data) &&
+            Array.isArray(entry.data.episodes)
+        )
       )
     : {};
 
@@ -156,6 +162,14 @@ export function createStore(storage = defaultStorage(), { now = Date.now } = {})
     state,
 
     save,
+
+    // 另一个标签页改了数据后调用：重新读入，免得本页下次保存时用旧数据把它盖掉。
+    reload() {
+      Object.assign(state, sanitize(read(KEY)));
+      for (const topic of ['subs', 'progress', 'favorites', 'recent', 'stats', 'settings']) {
+        for (const listener of listeners) listener(topic);
+      }
+    },
 
     on(listener) {
       listeners.add(listener);

@@ -119,17 +119,29 @@ function requestOnce(url, { lookup, isBlocked, maxBytes, deadline }) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer = null;
+    let req = null;
+    let response = null;
+    let decoder = null;
+    // 结束时把连接和解压器都停掉：很小的压缩包可能已经整个到达，
+    // 只断开连接的话解压器还会在后台把它全部解开。
+    const stop = () => {
+      if (decoder) decoder.destroy();
+      if (response) response.destroy();
+      if (req) req.destroy();
+    };
     const settle = (fn, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       fn(value);
     };
-    const fail = (err) =>
+    const fail = (err) => {
       settle(reject, err instanceof FetchError ? err : new FetchError('UPSTREAM', err.message));
+      stop();
+    };
 
     const client = url.protocol === 'https:' ? https : http;
-    const req = client.request(
+    req = client.request(
       url,
       {
         method: 'GET',
@@ -142,28 +154,25 @@ function requestOnce(url, { lookup, isBlocked, maxBytes, deadline }) {
         },
       },
       (res) => {
+        response = res;
         const status = res.statusCode || 0;
         if (status >= 300 && status < 400 && res.headers.location) {
-          res.resume();
-          return settle(resolve, { redirect: res.headers.location });
+          settle(resolve, { redirect: res.headers.location });
+          return stop();
         }
         if (status < 200 || status >= 300) {
-          res.destroy();
           return fail(new FetchError('UPSTREAM', `上游返回 ${status}`));
         }
 
-        const decoder = decoderFor(res.headers['content-encoding']);
+        decoder = decoderFor(res.headers['content-encoding']);
         const body = decoder ? res.pipe(decoder) : res;
         const chunks = [];
         let size = 0;
         body.on('data', (chunk) => {
+          if (settled) return;
           size += chunk.length;
-          if (size > maxBytes) {
-            req.destroy();
-            fail(new FetchError('TOO_LARGE', '响应过大'));
-          } else {
-            chunks.push(chunk);
-          }
+          if (size > maxBytes) fail(new FetchError('TOO_LARGE', '响应过大'));
+          else chunks.push(chunk);
         });
         body.on('end', () => {
           const contentType = String(res.headers['content-type'] || '');
@@ -175,10 +184,7 @@ function requestOnce(url, { lookup, isBlocked, maxBytes, deadline }) {
       }
     );
 
-    timer = setTimeout(() => {
-      fail(new FetchError('TIMEOUT', '请求超时'));
-      req.destroy();
-    }, Math.max(0, deadline - Date.now()));
+    timer = setTimeout(() => fail(new FetchError('TIMEOUT', '请求超时')), Math.max(0, deadline - Date.now()));
 
     req.on('error', fail);
     req.end();

@@ -196,13 +196,8 @@ function serveStatic(req, res, root, pathname) {
   } catch {
     return notFound(res);
   }
-  if (stat.isDirectory()) {
-    if (!decoded.endsWith('/')) {
-      res.writeHead(308, { Location: `${pathname}/` });
-      return res.end();
-    }
-    return serveFile(req, res, path.join(target, 'index.html'));
-  }
+  // 与 Vercel 一致：目录带不带结尾斜杠都直接返回 index.html，不做重定向。
+  if (stat.isDirectory()) return serveFile(req, res, path.join(target, 'index.html'));
   return serveFile(req, res, target);
 }
 

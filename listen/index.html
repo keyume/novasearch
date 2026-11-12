@@ -2,6 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script>
+// 页面里的资源都用相对路径。地址缺少结尾斜杠（/listen）时它们会解析到站点根目录，所以先补上。
+if (!/\/$|\.html$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>每日听力</title>
 <meta name="description" content="每天自动更新的英语听力：中高级公开播客的新单集，带变速、A-B 复读和断点续播。">
@@ -234,6 +238,7 @@ a { color: var(--accent); }
 .mini-main { display: block; min-width: 0; height: 100%; text-align: left; }
 .mini-title { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mini-show { display: block; font-size: 13px; color: var(--on-sheet-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mini-player[data-error] .mini-show { color: var(--lamp); }
 .mini-play { display: grid; place-items: center; width: 52px; height: 52px; }
 .mini-play svg { width: 30px; height: 30px; }
 

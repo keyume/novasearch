@@ -80,18 +80,27 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', () => player.flush());
 
+// ---- 另一个标签页改了数据：重新读入，避免本页保存时把它覆盖 ----
+window.addEventListener('storage', (event) => {
+  if (event.key === 'listen.v1' || event.key === null) store.reload();
+});
+
 // ---- 键盘：空格播放/暂停，左右方向键后退/前进 ----
 document.addEventListener('keydown', (event) => {
   if (!player.state.episode || event.altKey || event.ctrlKey || event.metaKey) return;
   const target = event.target;
   const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
-  if (tag === 'input' || tag === 'textarea' || tag === 'select' || (target && target.isContentEditable)) return;
+  // 进度条（range）不算文本输入：焦点留在它上面时快捷键照常工作，
+  // 并且不让浏览器按滑块自己的步长去移动它。
+  const isSeekBar = tag === 'input' && target.type === 'range';
+  if (!isSeekBar && (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable)) return;
 
   if (event.key === ' ' || event.code === 'Space') {
     // 焦点在按钮或链接上时，空格本来就会触发它
     if (tag === 'button' || tag === 'a') return;
     event.preventDefault();
-    player.toggle();
+    if (player.state.error) player.retry();
+    else player.toggle();
   } else if (event.key === 'ArrowLeft') {
     event.preventDefault();
     player.skip(-10);

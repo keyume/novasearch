@@ -258,6 +258,89 @@ try {
     }
   });
 
+  await step('点过进度条之后，方向键和空格仍然有效', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-episode]').nth(1).locator('[data-action="play-episode"]').click();
+    await page.waitForFunction(() => !document.querySelector('audio').paused);
+    await page.click('#mini-player [data-action="expand"]');
+    const box = await page.locator('#player-sheet .dial').boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForFunction(() => document.querySelector('audio').currentTime > 55);
+    await page.waitForTimeout(1200);
+    const before = (await audioState()).t;
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(300);
+    const after = (await audioState()).t;
+    assert.ok(after > before + 10, `ArrowRight: ${before} → ${after}`);
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(300);
+    assert.ok((await audioState()).t < after, 'ArrowLeft goes back');
+    await page.keyboard.press('Space');
+    await page.waitForFunction(() => document.querySelector('audio').paused);
+    await page.click('#player-sheet [data-action="collapse"]');
+  });
+
+  await step('另一个标签页的改动不会被本页覆盖', async () => {
+    const count = () => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('listen.v1')).favorites).length);
+    const start = await count();
+    const other = await context.newPage();
+    await other.goto(`${base}/listen/`);
+    await other.locator('[data-episode] [data-action="fav"][aria-pressed="false"]').first().click();
+    assert.equal(await count(), start + 1);
+    await other.close();
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    assert.equal(await count(), start + 1);
+    await page.click('[data-tab="me"]');
+    await page.waitForSelector('[data-section="favorites"] [data-episode]');
+    assert.equal(await page.locator('[data-section="favorites"] [data-episode]').count(), start + 1);
+    await page.click('[data-tab="today"]');
+  });
+
+  await step('地址不带结尾斜杠也能打开', async () => {
+    const other = await context.newPage();
+    const errors = [];
+    other.on('pageerror', (err) => errors.push(err.message));
+    await other.goto(`${base}/listen`);
+    await other.waitForSelector('[data-episode]');
+    assert.ok(new URL(other.url()).pathname.endsWith('/listen/'), other.url());
+    assert.deepEqual(errors, []);
+    await other.close();
+  });
+
+  await step('音频加载失败时迷你播放条给出提示，重试后能播放', async () => {
+    const other = await context.newPage();
+    await other.route('**/__fixtures/tone.wav*', (route) => route.fulfill({ status: 404, body: 'gone' }));
+    await other.goto(`${base}/listen/`);
+    await other.locator('[data-episode]').nth(3).locator('[data-action="play-episode"]').click();
+    await other.waitForSelector('#mini-player[data-error]');
+    assert.match(await other.textContent('#mini-player'), /加载失败/);
+    await other.unroute('**/__fixtures/tone.wav*');
+    await other.click('#mini-player [data-action="play"]');
+    await other.waitForFunction(() => document.querySelector('audio').currentTime > 0.3, null, { timeout: 5000 });
+    assert.equal(await other.locator('#mini-player[data-error]').count(), 0);
+    await other.close();
+  });
+
+  await step('页面一直开着，隔天回来时今日会更新', async () => {
+    const later = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const other = await later.newPage();
+    await other.clock.install({ time: new Date() });
+    let requests = 0;
+    other.on('request', (request) => {
+      if (request.url().includes('/api/feed')) requests += 1;
+    });
+    await other.goto(`${base}/listen/`);
+    await other.waitForSelector('[data-episode]');
+    const dateBefore = await other.textContent('.masthead-date');
+    const requestsBefore = requests;
+    await other.clock.fastForward('26:00:00');
+    await other.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await other.waitForFunction((text) => document.querySelector('.masthead-date').textContent !== text, dateBefore);
+    await other.waitForTimeout(500);
+    assert.ok(requests > requestsBefore, `feed requests ${requestsBefore} → ${requests}`);
+    await later.close();
+  });
+
   await step('全程没有页面错误', async () => {
     assert.deepEqual(problems, []);
   });

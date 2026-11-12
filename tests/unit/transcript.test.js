@@ -110,3 +110,26 @@ test('最多 2000 段', () => {
   const text = Array.from({ length: 2500 }, (_, i) => `para ${i}`).join('\n\n');
   assert.equal(parseTranscript(text, 'text/plain', '').length, 2000);
 });
+
+test('恶意输入不会让解析耗时暴涨（线性时间）', () => {
+  const inputs = [
+    ['<script'.repeat(150000), 'text/html'],
+    ['<'.repeat(1000000), 'text/html'],
+    ['<!--'.repeat(250000), 'text/html'],
+    [`WEBVTT\n\n00:01.000 --> 00:02.000\n${'<'.repeat(1000000)}`, 'text/vtt'],
+    [`\n${' '.repeat(1000000)}x`, 'text/plain'],
+    [`&${'a'.repeat(1000000)}`, 'text/plain'],
+  ];
+  for (const [text, type] of inputs) {
+    const started = Date.now();
+    parseTranscript(text, type, '');
+    const took = Date.now() - started;
+    assert.ok(took < 1000, `${type} ${text.slice(0, 12)}… took ${took}ms`);
+  }
+});
+
+test('HTML：未闭合的标签与注释不丢掉前面的正文', () => {
+  assert.deepEqual(parseTranscript('<p>Kept</p><script>var a = 1;', 'text/html', ''), ['Kept']);
+  assert.deepEqual(parseTranscript('<p>Kept</p><!-- never closed', 'text/html', ''), ['Kept']);
+  assert.deepEqual(parseTranscript('<p>a < b and c > d</p>', 'text/html', ''), ['a d']);
+});

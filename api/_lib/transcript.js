@@ -6,7 +6,7 @@ const LONG_PARAGRAPH = 400; // 段落超过这个长度且句子结束时另起�
 const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
 function decodeEntities(value) {
-  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body) => {
+  return value.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z]{1,8});/gi, (whole, body) => {
     if (body[0] === '#') {
       const code = body[1].toLowerCase() === 'x' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
       return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
@@ -16,7 +16,54 @@ function decodeEntities(value) {
   });
 }
 
-const clean = (value) => decodeEntities(value.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+const DROPPED_TAGS = new Set(['script', 'style', 'head', 'noscript']);
+const BLOCK_TAGS = new Set([
+  'p', 'div', 'br', 'li', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'tr', 'section', 'article', 'blockquote',
+]);
+
+// 去掉标签。只向前扫描、每个字符最多看一遍：输入来自任意网址，
+// 用正则回溯的写法会被构造的内容拖成平方级耗时。
+// blocks 为 true 时，块级标签处输出换行；注释和 script/style 等连同内容丢弃。
+function stripTags(text, { blocks = false } = {}) {
+  const lower = blocks ? text.toLowerCase() : text;
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    const lt = text.indexOf('<', i);
+    if (lt === -1) {
+      out.push(text.slice(i));
+      break;
+    }
+    out.push(text.slice(i, lt));
+    if (blocks && text.startsWith('<!--', lt)) {
+      const end = text.indexOf('-->', lt + 4);
+      if (end === -1) break;
+      i = end + 3;
+      continue;
+    }
+    const gt = text.indexOf('>', lt + 1);
+    if (gt === -1) break; // 没有闭合的标签：后面的内容不可信，丢弃
+    if (blocks) {
+      const name = /^<\/?([a-z][a-z0-9]{0,15})/.exec(lower.slice(lt, lt + 18));
+      const tag = name ? name[1] : '';
+      if (DROPPED_TAGS.has(tag) && lower[lt + 1] !== '/') {
+        const close = lower.indexOf(`</${tag}`, gt + 1);
+        if (close === -1) break;
+        const closeEnd = text.indexOf('>', close);
+        if (closeEnd === -1) break;
+        i = closeEnd + 1;
+        continue;
+      }
+      if (BLOCK_TAGS.has(tag)) out.push('\n');
+    }
+    i = gt + 1;
+  }
+  return out.join('');
+}
+
+const tidy = (value) => decodeEntities(value).replace(/[ \t\n\r\f\v\u00a0]+/g, ' ').trim();
+const clean = (value) => tidy(stripTags(value));
 
 function detectFormat(text, contentType, url) {
   const type = String(contentType || '').toLowerCase();
@@ -65,20 +112,24 @@ function fromCues(text) {
 }
 
 function fromHtml(text) {
-  return text
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<(script|style|head|noscript)\b[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<\/?(p|div|br|li|ul|ol|h[1-6]|tr|section|article|blockquote)\b[^>]*>/gi, '\n')
-    .split('\n')
-    .map(clean)
-    .filter(Boolean);
+  return stripTags(text, { blocks: true }).split('\n').map(tidy).filter(Boolean);
 }
 
+// 按空行分段。逐行处理，不用会回溯的 \n\s*\n。
 function fromPlain(text) {
-  return text
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
+  const paragraphs = [];
+  let current = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed) {
+      current.push(trimmed);
+    } else if (current.length) {
+      paragraphs.push(current.join(' '));
+      current = [];
+    }
+  }
+  if (current.length) paragraphs.push(current.join(' '));
+  return paragraphs.map((paragraph) => paragraph.replace(/[ \t]+/g, ' '));
 }
 
 function parseTranscript(input, contentType, url) {

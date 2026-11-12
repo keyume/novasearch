@@ -14,7 +14,8 @@ export function mount(root, ctx) {
   let alive = true;
   let run = 0;
 
-  const now = new Date();
+  let shownDay = '';
+  const dateHeading = h('h1', { class: 'masthead-date' });
   const summary = h('p', { class: 'masthead-sub' });
   const daysToggle = h(
     'div',
@@ -31,18 +32,23 @@ export function mount(root, ctx) {
     h(
       'header',
       { class: 'masthead' },
-      h(
-        'h1',
-        { class: 'masthead-date' },
-        `${now.getMonth() + 1}月${now.getDate()}日`,
-        h('span', { class: 'masthead-weekday' }, formatWeekday(now))
-      ),
+      dateHeading,
       summary,
       daysToggle
     ),
     notice,
     list
   );
+
+  function renderDate() {
+    const now = new Date();
+    shownDay = now.toDateString();
+    replace(
+      dateHeading,
+      `${now.getMonth() + 1}月${now.getDate()}日`,
+      h('span', { class: 'masthead-weekday' }, formatWeekday(now))
+    );
+  }
 
   function renderSummary() {
     const stats = summarize(store.state.stats, new Date());
@@ -150,6 +156,19 @@ export function mount(root, ctx) {
     if (topic === 'stats') renderSummary();
   });
 
+  // 页面一直开着（固定的标签页、从后台恢复的主屏幕应用）时，回到前台就检查更新；
+  // 缓存没过期时不会发请求。
+  const onVisible = () => {
+    if (document.visibilityState !== 'visible') return;
+    if (new Date().toDateString() !== shownDay) {
+      renderDate();
+      renderSummary();
+    }
+    refresh(false);
+  };
+  document.addEventListener('visibilitychange', onVisible);
+
+  renderDate();
   renderSummary();
   refresh(false);
 
@@ -159,5 +178,6 @@ export function mount(root, ctx) {
     unbind();
     offStore();
     root.removeEventListener('click', onClick);
+    document.removeEventListener('visibilitychange', onVisible);
   };
 }

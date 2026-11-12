@@ -10,6 +10,7 @@ export function mountPlayer({ mini, sheet, ctx }) {
   const transcripts = new Map(); // 单集 id → 段落数组
   let shownId = null;
   let open = false;
+  let dragging = false; // 正在拖动进度条：期间不要用播放位置覆盖滑块
 
   // ---- 迷你播放条 ----
   const miniFill = h('span', {});
@@ -198,7 +199,7 @@ export function mountPlayer({ mini, sheet, ctx }) {
     miniFill.style.width = percent;
     played.style.width = percent;
     needle.style.left = percent;
-    if (document.activeElement !== seek) seek.value = String(Math.round(ratio * 1000));
+    if (!dragging) seek.value = String(Math.round(ratio * 1000));
     seek.disabled = !state.dur;
     seek.setAttribute('aria-valuetext', `${formatTime(state.pos)}，共 ${formatTime(state.dur)}`);
     timePos.textContent = formatTime(state.pos);
@@ -239,7 +240,13 @@ export function mountPlayer({ mini, sheet, ctx }) {
     autoNext.setAttribute('aria-pressed', String(store.state.settings.autoNext));
 
     errorBox.hidden = !state.error;
-    errorText.textContent = state.error || '';
+    setText(errorText, state.error || '');
+    // 出错时迷你播放条也要说明，并把播放键变成重试
+    mini.toggleAttribute('data-error', Boolean(state.error));
+    setText(miniShow, state.error ? '加载失败，点右侧按钮重试' : episode.showTitle || '');
+    const playLabel = state.error ? '重试' : state.playing ? '暂停' : '播放';
+    miniPlay.setAttribute('aria-label', playLabel);
+    playButton.setAttribute('aria-label', playLabel);
   }
 
   function openSheet() {
@@ -263,7 +270,7 @@ export function mountPlayer({ mini, sheet, ctx }) {
   const actions = {
     expand: openSheet,
     collapse: closeSheet,
-    play: () => player.toggle(),
+    play: () => (player.state.error ? player.retry() : player.toggle()),
     prev: () => player.prev(),
     next: () => player.next(),
     back: () => player.skip(-10),
@@ -292,6 +299,14 @@ export function mountPlayer({ mini, sheet, ctx }) {
   seek.addEventListener('input', () => {
     if (player.state.dur) player.seek((Number(seek.value) / 1000) * player.state.dur);
   });
+  seek.addEventListener('pointerdown', () => {
+    dragging = true;
+  });
+  for (const type of ['pointerup', 'pointercancel', 'change', 'blur']) {
+    seek.addEventListener(type, () => {
+      dragging = false;
+    });
+  }
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && open) closeSheet();

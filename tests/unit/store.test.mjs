@@ -262,3 +262,35 @@ test('缓存写入超出容量时，持久化的副本丢弃最旧的条目', ()
   assert.equal(store.getFeedCache('https://1.test/').data.title, 'one');
   assert.equal(store.getFeedCache('https://3.test/').data.title, 'three');
 });
+
+test('reload：重新读取其他标签页写入的数据，之后的保存不会覆盖它', () => {
+  const storage = fakeStorage();
+  const a = createStore(storage);
+  const b = createStore(storage);
+  const topics = [];
+  a.on((topic) => topics.push(topic));
+  b.toggleFavorite(ep('e1'));
+  b.addListened('2026-11-12', 90);
+  const stateBefore = a.state;
+  a.reload();
+  assert.equal(a.state, stateBefore);
+  assert.equal(a.state.favorites.e1.title, 'Episode e1');
+  assert.ok(topics.includes('favorites') && topics.includes('stats'));
+  a.setSetting('speed', 2);
+  const fresh = createStore(storage);
+  assert.equal(fresh.state.favorites.e1.title, 'Episode e1');
+  assert.equal(fresh.state.stats['2026-11-12'], 90);
+  assert.equal(fresh.state.settings.speed, 2);
+});
+
+test('节目缓存：结构不对的条目在加载时被丢弃', () => {
+  const stored = JSON.stringify({
+    'https://old.test/': { at: 1, data: { title: 'no episodes field' } },
+    'https://bad.test/': { at: 1, data: { episodes: 'x' } },
+    'https://ok.test/': { at: 1, data: { title: 'ok', episodes: [] } },
+  });
+  const store = createStore(fakeStorage({ 'listen.cache.v1': stored }));
+  assert.equal(store.getFeedCache('https://old.test/'), null);
+  assert.equal(store.getFeedCache('https://bad.test/'), null);
+  assert.equal(store.getFeedCache('https://ok.test/').data.title, 'ok');
+});

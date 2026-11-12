@@ -220,3 +220,38 @@ test('safeFetchText：连接被拒 → UPSTREAM', async () => {
     'UPSTREAM'
   );
 });
+
+test('safeFetchText：超限后立即停止解压，不在后台继续消耗 CPU', async () => {
+  // brotli 对全零数据压缩率极高：整个炸弹只有几百字节，一个数据包就全部到达，
+  // 所以光断开连接不够，必须把解压器本身停掉。
+  const bomb = zlib.brotliCompressSync(Buffer.alloc(512 * 1024 * 1024), {
+    params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 1 },
+  });
+  const bombServer = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain', 'content-encoding': 'br' });
+    res.end(bomb);
+  });
+  await new Promise((resolve) => bombServer.listen(0, '127.0.0.1', resolve));
+  const bombPort = bombServer.address().port;
+  try {
+    await rejectsWith(
+      safeFetchText(`http://feed.test:${bombPort}/`, opts({ ports: [bombPort] })),
+      'TOO_LARGE'
+    );
+    const before = process.cpuUsage();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const used = process.cpuUsage(before);
+    const cpuMs = (used.user + used.system) / 1000;
+    assert.ok(cpuMs < 200, `still used ${cpuMs.toFixed(0)}ms CPU after rejecting`);
+  } finally {
+    bombServer.closeAllConnections();
+    bombServer.close();
+  }
+});
+
+test('safeFetchText：重定向后不留下未关闭的连接', async () => {
+  await safeFetchText(url('/hop3'), opts());
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const open = await new Promise((resolve) => server.getConnections((err, count) => resolve(count)));
+  assert.equal(open, 0);
+});
