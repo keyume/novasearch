@@ -1,0 +1,12 @@
+{
+  "name": "novasearch",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"tests/unit/*.test.*\"",
+    "dev": "node scripts/dev-server.js",
+    "e2e": "node tests/e2e/smoke.mjs"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.12.0"
+  }
+}

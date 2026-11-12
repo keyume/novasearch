@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  <channel>
+    <title>Sample Show</title>
+    <link>https://show.test/</link>
+    <description><![CDATA[A show about <b>things</b>.]]></description>
+    <itunes:image href="https://img.test/cover.jpg"/>
+    <image><url>https://img.test/fallback.jpg</url><title>Sample Show</title></image>
+
+    <item>
+      <title><![CDATA[Tides & the Moon]]></title>
+      <guid isPermaLink="false">ep-1</guid>
+      <pubDate>Thu, 12 Nov 2026 10:00:00 GMT</pubDate>
+      <link>https://show.test/ep-1</link>
+      <enclosure url="https://cdn.test/ep-1.mp3" length="1234" type="audio/mpeg"/>
+      <itunes:duration>00:13:32</itunes:duration>
+      <description>Short summary.</description>
+      <content:encoded><![CDATA[<p>Full notes for episode one.</p><p>More &amp; more.</p>]]></content:encoded>
+      <podcast:transcript url="https://t.test/1.html" type="text/html"/>
+      <podcast:transcript url="https://t.test/1.vtt" type="text/vtt"/>
+      <podcast:transcript url="https://t.test/1.json" type="application/json"/>
+    </item>
+
+    <item>
+      <title>Seconds Only</title>
+      <guid>ep-2</guid>
+      <pubDate>Wed, 11 Nov 2026 10:00:00 GMT</pubDate>
+      <enclosure url="https://cdn.test/ep-2.mp3" type="audio/mpeg"/>
+      <itunes:duration>812</itunes:duration>
+      <description>Plain description for ep 2.</description>
+    </item>
+
+    <item>
+      <title>Insecure Audio, No Guid</title>
+      <pubDate>Tue, 10 Nov 2026 10:00:00 GMT</pubDate>
+      <enclosure url="http://cdn.test/ep-3.mp3" type="audio/mpeg"/>
+      <itunes:summary>Summary only.</itunes:summary>
+    </item>
+
+    <item>
+      <title>Article Without Audio</title>
+      <guid>article-1</guid>
+      <pubDate>Mon, 09 Nov 2026 10:00:00 GMT</pubDate>
+      <description>No enclosure here.</description>
+    </item>
+
+    <item>
+      <title>Bad Date</title>
+      <guid>ep-5</guid>
+      <pubDate>not a date</pubDate>
+      <enclosure url="https://cdn.test/ep-5.mp3" type="audio/mpeg"/>
+    </item>
+  </channel>
+</rss>
