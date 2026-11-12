@@ -188,3 +188,17 @@ test('loadShows：空列表', async () => {
     failed: [],
   });
 });
+
+test('cachedEpisodes：只读缓存、不发请求，并报告缺缓存或已过期的节目', async () => {
+  const { cachedEpisodes } = await import('../../listen/js/feeds.js');
+  const store = createStore(null);
+  store.setFeedCache('https://a.test/rss', feedData(raw(1), raw(2)), 0);
+  store.setFeedCache('https://b.test/rss', feedData(raw(3)), 50 * 60 * 1000);
+  const out = cachedEpisodes([show('a'), show('b'), show('c')], { store, now: 60 * 60 * 1000 });
+  assert.equal(out.episodes.length, 3);
+  assert.equal(out.episodes[0].showId, 'a');
+  assert.equal(out.episodes[2].id, episodeId('https://b.test/rss', raw(3)));
+  assert.equal(out.fresh, false);
+  assert.equal(cachedEpisodes([show('b')], { store, now: 60 * 60 * 1000 }).fresh, true);
+  assert.deepEqual(cachedEpisodes([], { store, now: 0 }), { episodes: [], fresh: true });
+});

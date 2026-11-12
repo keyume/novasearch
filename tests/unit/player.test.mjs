@@ -18,13 +18,13 @@ class FakeAudio extends EventTarget {
   }
   play() {
     this.playCalls += 1;
+    this.paused = false; // 浏览器里 paused 是同步变化的，事件稍后才派发
     const result = this.playResult();
     result.then(
+      () => this.fire('play'),
       () => {
-        this.paused = false;
-        this.fire('play');
-      },
-      () => {}
+        this.paused = true;
+      }
     );
     return result;
   }
@@ -521,4 +521,20 @@ test('retry：出错后重新加载当前单集并回到出错前的位置', asy
   audio.loaded(600);
   assert.equal(audio.currentTime, 200);
   assert.equal(player.state.episode.id, 'e1');
+});
+
+test('toggle 依据 audio.paused 而不是滞后的事件：快速连按两次会暂停再继续', async () => {
+  const { audio, player, queue, settle } = setup();
+  player.load(queue, 0);
+  await settle();
+  assert.equal(audio.playCalls, 1);
+  // 模拟浏览器：pause() 同步改变 paused，但 pause 事件还没派发
+  audio.pause = function pause() {
+    this.paused = true;
+  };
+  player.toggle();
+  assert.equal(audio.paused, true);
+  player.toggle();
+  assert.equal(audio.playCalls, 2);
+  assert.equal(audio.paused, false);
 });

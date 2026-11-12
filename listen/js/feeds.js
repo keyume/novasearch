@@ -25,6 +25,19 @@ function normalize(show, data) {
   }));
 }
 
+// 只读缓存、不发请求：用来在刷新完成前先把上次的内容显示出来。
+// fresh 为 false 表示至少有一个节目没有缓存或缓存已过期。
+export function cachedEpisodes(shows, { store, now = Date.now() }) {
+  const episodes = [];
+  let fresh = true;
+  for (const show of shows) {
+    const cached = store.getFeedCache(show.feedUrl);
+    if (cached) episodes.push(...normalize(show, cached.data));
+    if (!cached || now - cached.at >= CACHE_TTL_MS) fresh = false;
+  }
+  return { episodes, fresh };
+}
+
 async function requestFeed(feedUrl, fetchImpl) {
   const response = await fetchImpl(`/api/feed?url=${encodeURIComponent(feedUrl)}`);
   let body = null;

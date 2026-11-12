@@ -134,8 +134,9 @@ export function createPlayer({ audio, store, now = Date.now, mediaSession = null
 
   function toggle() {
     if (!state.episode) return;
-    if (state.playing) pause();
-    else play();
+    // 以 audio.paused 为准：state.playing 要等事件派发后才更新，快速连按时会滞后。
+    if (audio.paused) play();
+    else pause();
   }
 
   function seek(seconds) {
